@@ -1,0 +1,135 @@
+//This script was made by Nadav Golan-Yanay
+
+FeatureScript 2473;
+import(path : "onshape/std/common.fs", version : "2473.0");
+icon::import(path : "e7368ad8714a4846a646f4c7", version : "39446fc876f81ff4d17b5cae");
+image::import(path : "ddf2c80f6c9364708b85d004", version : "a10d46f1d0bfb5f44a5fbf99");
+
+//icon::import(path : "d4ed6ce05fee8e0df239a0b5", version : "4782cf9d9fac97493e32118b");
+//image::import(path : "66a26efee11ed491caab7e4f", version : "a6916cd37aae8b09690778ad");
+
+
+
+annotation { "Feature Type Name" : "Rack And Pinion", "Feature Type Description" : "Made by Nadav Golan-Yanay", "Description Image" : image::BLOB_DATA,"Icon" : icon::BLOB_DATA}
+export const RackAndPinion = defineFeature(function(context is Context, id is Id, definition is map)
+    precondition
+    {
+        // Define the parameters of the feature type
+        annotation { "Name" : "Sketch vertex or mate connector",
+                    "Filter" : (EntityType.VERTEX && SketchObject.YES) || BodyType.MATE_CONNECTOR,
+                    "MaxNumberOfPicks" : 1,
+                    "Description" : "Select a sketch vertex or mate connector to locate the gear" }
+        definition.center is Query;
+
+        // Correct annotation for selecting spline edges
+        annotation { "Name" : "Select spline edges of the teeth",
+                    "Filter" : EntityType.EDGE && SketchObject.YES,
+                    "MaxNumberOfPicks" : 2,
+                    "MinNumberOfPicks" : 1 }
+        definition.teethSplines is Query;
+
+        annotation { "Name" : "Module" }
+        isLength(definition.module, LENGTH_BOUNDS);
+
+        annotation { "Name" : "length" }
+        isLength(definition.length, LENGTH_BOUNDS);
+
+        annotation { "Name" : "depth" }
+        isLength(definition.depth, LENGTH_BOUNDS);
+    }
+    {
+        // Define the sketch plane
+        var sketchPlane = plane(WORLD_ORIGIN, -Y_DIRECTION, X_DIRECTION);
+
+        // If a center is defined, adjust the plane accordingly
+        if (!isQueryEmpty(context, definition.center))
+        {
+            try silent
+            {
+                sketchPlane = plane(evMateConnector(context, {
+                                "mateConnector" : definition.center
+                            }));
+            }
+            catch
+            {
+                sketchPlane = evOwnerSketchPlane(context, { "entity" : definition.center });
+                sketchPlane.origin = evVertexPoint(context, { "vertex" : definition.center });
+            }
+        }
+
+        // 1. Create a sketch on the defined plane
+        var sketch = newSketchOnPlane(context, id + "sketch", {
+                "sketchPlane" : sketchPlane
+            });
+
+        // 2. Calculate the end point of the line (20 degrees from Y-axis)
+        var angle = 20 * degree;
+        var lineEnd = vector(sin(angle), cos(angle)) * definition.module * -0.73803; // Scale appropriately based on module
+
+        // 3. Draw a line starting from (0, 0) to the calculated end point
+        skLineSegment(sketch, "line1", {
+                    "start" : vector(0, 0) * millimeter, // Starting point is (0, 0)
+                    "end" : lineEnd, // No need to multiply by millimeter here, already in correct units
+                    "construction" : true
+                });
+
+        // Check if the radius meets the bounds
+        skCircle(sketch, "circle1", {
+                    "center" : vector(0, 0) * millimeter,
+                    "radius" : definition.module * 0.73803,
+                    "construction" : true
+                });
+
+        skLineSegment(sketch, "line2", {
+                    "start" : vector(-0.99468, 0.42337) * definition.module,
+                    "end" : vector(-0.99468, -0.42337) * definition.module
+                });
+
+        skLineSegment(sketch, "line3", {
+                    "start" : vector(-0.99468, 0.42337) * definition.module,
+                    "end" : vector(1.1, 1.185777) * definition.module
+                });
+
+        skLineSegment(sketch, "line4", {
+                    "start" : vector(-0.99468, -0.42337) * definition.module,
+                    "end" : vector(1.1, -1.18577) * definition.module
+                });
+
+        skLineSegment(sketch, "line5", {
+                    "start" : vector(1.1, -1.18577) * definition.module,
+                    "end" : vector(1.1, -1.57080) * definition.module
+                });
+
+        skLineSegment(sketch, "line6", {
+                    "start" : vector(1.1, 1.18577) * definition.module,
+                    "end" : vector(1.1, 1.57080) * definition.module
+                });
+
+        skLineSegment(sketch, "line7", {
+                    "start" : vector(1.1, 1.57080) * definition.module,
+                    "end" : vector(1.5, 1.57080) * definition.module
+                });
+
+        skLineSegment(sketch, "line8", {
+                    "start" : vector(1.1, -1.57080) * definition.module,
+                    "end" : vector(1.5, -1.57080) * definition.module
+                });
+
+        skLineSegment(sketch, "line9", {
+                    "start" : vector(1.5, 1.57080) * definition.module,
+                    "end" : vector(1.5, -1.57080) * definition.module
+                });
+
+        // 5. Solve the sketch to apply the geometry and constraints
+        skSolve(sketch);
+
+        // 6. Perform the extrusion operation after solving the sketch
+        opExtrude(context, id + "extrude1", {
+                    "entities" : qSketchRegion(id + "sketch"),
+                    "direction" : sketchPlane.normal,
+                    "endBound" : BoundingType.BLIND,
+                    "endDepth" : definition.depth
+                });
+                
+
+    });
